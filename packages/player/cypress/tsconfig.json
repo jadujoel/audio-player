@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+      "strict": true,
+      "forceConsistentCasingInFileNames": true,
+      "target": "es6",
+      "lib": ["esnext", "dom"],
+      "types": ["cypress"],
+      "moduleResolution": "node"
+    },
+    "include": ["**/*.ts"],
+    "downlevelIteration": true
+}

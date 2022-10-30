@@ -1,0 +1,27 @@
+{
+   "name": "player",
+   "version": "0.1.3",
+   "description": "Play samples using webAudio AudioBufferSourceNode",
+   "main": "dist/index.js",
+   "types": "dist/@types/index.d.ts",
+   "scripts": {
+      "clean": "rimraf dist",
+      "build": "webpack --mode production",
+      "build:watch": "webpack --mode production --watch",
+      "test": "cypress run",
+      "test:ui": "cypress open",
+      "lint": "eslint -c ../../.eslintrc.js \"src/**/*.{ts,tsx}\" --fix"
+   },
+   "keywords": [],
+   "author": "Joel Lof <jlof@evolution.com> (https://joellof.com/)",
+   "license": "MIT",
+   "devDependencies": {
+      "copy-webpack-plugin": "11.0.0",
+      "cypress": "*",
+      "ts-loader": "*",
+      "ts-node": "*",
+      "typescript": "*",
+      "webpack": "*",
+      "webpack-cli": "*"
+   }
+}
