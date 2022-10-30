@@ -1,6 +1,6 @@
 
 export function range(max: number) {
-    return [...Array(max).keys()]
+    return [...Array(Math.max(max, 0)).keys()]
 }
 
 export function xrange(min: number, max: number) {

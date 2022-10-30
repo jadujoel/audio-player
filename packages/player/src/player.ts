@@ -2,7 +2,7 @@ import { max } from "./clamp"
 import { Queue } from "./queue"
 import { range, xrange } from "./range"
 import { Sample } from "./sample"
-import type { PlayOptions, StopOptions } from "./types"
+import type { FunctionAny, PlayOptions, StopOptions } from "./types"
 
 export class Player {
     #audioContext: AudioContext
@@ -12,8 +12,13 @@ export class Player {
     samplesPlaying = new Queue<Sample>()
     samplesPaused = new Queue<Sample>()
     #crossfadeTime = 0.02
-    polyphony = 2
+    #polyphony = 2
     #buffer: AudioBuffer | null
+
+    onplayCallbacks: FunctionAny[] = []
+    onpauseCallbacks: FunctionAny[] = []
+    onresumeCallbacks: FunctionAny[] = []
+    onstopCallbacks: FunctionAny[] = []
 
     constructor(audioContext: AudioContext, buffer: AudioBuffer | null = null) {
         this.#buffer = buffer
@@ -21,6 +26,20 @@ export class Player {
         this.#pan = this.#audioContext.createStereoPanner()
         this.#gain = this.#audioContext.createGain()
         this.#pan.connect(this.#gain)
+    }
+
+    get bufferTime() {
+        return (this.buffer?.length || 0) * this.#audioContext.sampleRate
+    }
+
+    set polyphony(newPolyphony: number) {
+        console.debug('[player]: set polyphony', newPolyphony)
+        this.#polyphony = newPolyphony
+        this.#clampPolyphony()
+    }
+
+    get polyphony() {
+        return this.#polyphony
     }
 
     set buffer(newBuffer: AudioBuffer | null) {
@@ -64,14 +83,14 @@ export class Player {
     }
 
     set detune(newDetune: number) {
-        console.debug('[player]: detune', newDetune)
         for (const sample of this.samples) {
             sample.detune = newDetune
         }
     }
 
     get detune() {
-        return this.samples[0].detune || 0
+        const firstSample = this.samples[0]
+        return firstSample ? firstSample.detune : 0
     }
 
     get samples() {
@@ -98,37 +117,66 @@ export class Player {
         this.#gain.disconnect()
     }
 
+    triggerOnplay() {
+        console.debug('[player]: trigger onplay')
+        for (const cb of this.onplayCallbacks) {
+            cb()
+        }
+    }
+
+    triggerOnstop() {
+        for (const cb of this.onstopCallbacks) {
+            cb()
+        }
+    }
+
+    triggerOnpause() {
+        for (const cb of this.onpauseCallbacks) {
+            cb()
+        }
+    }
+
+    triggerOnresume() {
+        for (const cb of this.onresumeCallbacks) {
+            cb()
+        }
+    }
+
     play(options: PlayOptions = {}) {
-        const sample = new Sample(this.#audioContext)
+        console.debug('[player]: play')
+        const sample = new Sample(this.#audioContext, this.samplesPlaying.length)
         sample.buffer = this.#buffer
         sample.connect(this.#pan)
 
         sample.onstarted = () => {
-            console.debug("[player]: started")
             this.samplesPlaying.enqueue(sample)
-            if (this.samplesPlaying.length > this.polyphony) {
-                console.debug("[player]: polyphony clamp")
-                this.stop({fadeOut: this.crossfadeTime})
-            }
+            this.#clampPolyphony()
+            this.triggerOnplay()
         }
 
         // make sure we dequeue the sample when it finishes even if it's not stopped manually
         sample.onended = () => this.#onended()
 
         console.debug("[player]: playing:", this.samplesPlaying.length, "paused:", this.samplesPaused.length)
-        return sample.play(options)
+        const ret = sample.play(options)
+        return ret
     }
 
     pause(options = {when: 0, fadeOut: 0}) {
+        console.debug('[player]: pause')
         const sample = this.samplesPlaying.dequeue()
         if (!sample) {
             return Promise.resolve(this.now)
         }
         this.samplesPaused.enqueue(sample)
-        return sample.pause(options)
+        sample.onended = () => void 0
+        const ret = sample.pause(options)
+        ret.then(() => this.triggerOnpause())
+        return ret
     }
 
     stop({when, fadeOut}: StopOptions = {}) {
+        console.debug('[player]: stop')
         const then = max(this.now, when || 0)
         const sample = this.samplesPlaying.dequeue()
         if (!sample) {
@@ -136,10 +184,13 @@ export class Player {
         }
         // since sample was manually stop don't run the onended stop thing
         sample.onended = () => void 0
-        return sample.stop({when: then, fadeOut: fadeOut || 0.2})
+        const ret = sample.stop({when: then, fadeOut: fadeOut || 0.2})
+        ret.then(() => this.triggerOnstop())
+        return ret
     }
 
     resume(options = {when: 0, fadeIn: 0}) {
+        console.debug('[player]: resume')
         const sample = this.samplesPaused.dequeue()
         if (!sample) {
             return [
@@ -147,18 +198,30 @@ export class Player {
                 Promise.resolve(this.now)
             ] as const
         }
-        this.samplesPlaying.enqueue(sample)
-        return sample.resume(options)
+        // make sure we dequeue the sample when it finishes even if it's not stopped manually
+        sample.onended = () => this.#onended()
+        // this.samplesPlaying.enqueue(sample)
+        this.#clampPolyphony()
+        const ret = sample.resume(options)
+        ret[0].then(() => this.triggerOnresume())
+        return ret
     }
 
-    pauseAll(options = {when: 0, fadeOut: 0}) {
+    #clampPolyphony() {
+        while (this.samplesPlaying.length > this.polyphony) {
+            console.debug("[player]: polyphony clamp")
+            this.stop({fadeOut: this.crossfadeTime})
+        }
+    }
+
+    pauseAll(options = {when: this.now + 0.5, fadeOut: 0}) {
         return Promise.all(
             range(this.samplesPlaying.length)
                 .map(() => this.pause(options))
         )
     }
 
-    resumeAll(options = {when: 0, fadeIn: 0}) {
+    resumeAll(options = {when: this.now + 0.5, fadeIn: 0}) {
         return Promise.all(
             range(this.samplesPaused.length)
                 .map(() => this.resume(options))
@@ -172,8 +235,8 @@ export class Player {
         for (const i of range(n)) {
             promises[i] = this.stop(options)
         }
-        for (const i of xrange(n, n + m)) {
-            promises[i] = this.stopPaused(options)
+        for (const i of range(m)) {
+            promises[i + n] = this.stopPaused(options)
         }
         return Promise.all(promises)
     }
@@ -181,17 +244,24 @@ export class Player {
     /** Stop one sample that is paused */
     stopPaused(options: StopOptions = {}) {
         const sample = this.samplesPaused.dequeue()
-        return sample
+        const ret = sample
             ? sample.stop(options)
             : Promise.resolve(this.now)
+        ret.then(() => this.triggerOnstop())
+        return ret
     }
 
     /** Stops the first sample in the queue */
     #onended() {
         console.debug("[player]: onended")
         const sample = this.samplesPlaying.dequeue()
-        return sample
+        const ret = sample
             ? sample.stop()
             : Promise.resolve(this.now)
+        ret.then(() => {
+            this.triggerOnstop()
+            console.log("[player]: triggerOnstop")
+        })
+        return ret
     }
 }

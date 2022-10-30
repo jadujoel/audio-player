@@ -22,20 +22,36 @@ export class Sample {
     #playOffset = 0
     #pauseTime = 0
     #pauseGain = 0
-    #playOptions: PlayOptions = {}
 
-    buffer: AudioBuffer | null = null
+    #playOptions: PlayOptions = {}
+    #bufferTime = Number.MAX_SAFE_INTEGER
+
+    #buffer: AudioBuffer | null = null
     isPlaying = false
     // if you want to do something very special when the sourceNodeEnd
     onended: FunctionAny = () => void 0
     onstarted: FunctionAny = () => void 0
+    id = 0
 
-    constructor(audioContext: AudioContext) {
+    constructor(audioContext: AudioContext, id: number) {
+        this.id = id
         this.#audioContext = audioContext
         this.#sourceNode = this.#audioContext.createBufferSource()
         this.#pan = this.#audioContext.createStereoPanner()
         this.#gain = this.#audioContext.createGain()
         this.#pan.connect(this.#gain)
+    }
+
+    set buffer(newBuffer: AudioBuffer | null) {
+        console.debug('[sample]: set buffer')
+        this.#buffer = newBuffer
+        if (newBuffer) {
+            this.#bufferTime = newBuffer.length * this.#audioContext.sampleRate
+        }
+    }
+
+    get buffer() {
+        return this.#buffer
     }
 
     async dispose() {
@@ -63,24 +79,26 @@ export class Sample {
     /** Returns two promises, one When the Playback Starts, the other when it ends */
     play(options: PlayOptions = {}): readonly [Promise<number>, Promise<number>] {
         if (this.isPlaying) {
-            console.debug("[sample]: tried to play already playing")
+            console.debug("[sample]: tried to play already playing sample")
             return [Promise.resolve(this.now), Promise.resolve(this.now)] as const
         }
+        if (!this.buffer) {
+            console.debug("[sample]: sample has no buffer set")
+            return [Promise.resolve(this.now), Promise.resolve(this.now)] as const
+        }
+
         this.isPlaying = true
 
-        const required: SampleOptions = { ...this.#options, ...options }
-
         // store for later if we pause, resume etc
-        this.#options = required
+        this.#options = { ...this.#options, ...options }
 
-        const { detune, duration, loop, loopEnd, loopStart, when, offset, gain, pan } = required
+        const { detune, duration, loop, loopEnd, loopStart, when, offset, gain, pan } = this.#options
+        console.debug('[sample]: play options', this.#options)
+
         // don't try to schedule to the past
         const then = max(when, this.now)
 
-        /////// gain
         this.#gain.gain.value = gain
-        /////// fade
-
         this.#pan.pan.value = pan
 
         this.#sourceNode = this.#audioContext.createBufferSource()
@@ -101,41 +119,63 @@ export class Sample {
             this.isPlaying = false
         })
 
+        // for being able to pause / resume later
+        this.#playOffset = offset % this.#bufferTime
+        this.#playTime = max(this.now, then)
+        this.#playOptions = options
+
         this.#sourceNode.connect(this.#pan)
-        this.#sourceNode.start(then, offset, duration)
+        this.#sourceNode.start(then, this.#playOffset, duration === -1 ? void 0 : duration)
 
         const playPromise = this.#createPlayPromise(then)
         playPromise.then(() => {
             this.#sourceNode.dispatchEvent(new Event("started"))
         })
 
-        // for being able to pause / resume later
-        this.#playTime = max(this.now, then)
-        this.#playOffset = offset
-        this.#playOptions = options
+
 
         return [playPromise, this.#createEndedPromise()] as const
     }
 
+    /** Get the time the sample started playing */
+    get playTime() {
+        return this.#playTime
+    }
+
+    get pauseTime() {
+        return this.#pauseTime
+    }
+
     pause({when} = {when: 0}): Promise<number> {
+        console.debug('[sample]: pause')
         if (!this.isPlaying) {
             console.debug("[sample]: tried to pause sample that is not playing")
             return Promise.resolve(this.now)
         }
-        this.#pauseTime = this.now
-        this.#pauseGain = this.#gain.gain.value
-        const ret = this.#createEndedPromise()
-        this.#sourceNode.stop(when)
-        return ret
+        this.#pauseTime = max(when, this.now)
+        this.#pauseGain = this.#gain.gain.value // usefull if fadeout on pause
+
+        this.#sourceNode.stop(this.#pauseTime)
+        this.isPlaying = false
+        return this.#createEndedPromise()
     }
 
     resume({when} = {when: 0}): readonly [Promise<number>, Promise<number>] {
+        console.debug('[sample]: resume')
         if (this.isPlaying) {
             console.debug("[sample]: tried to resume sample that is already playing")
             return [Promise.resolve(this.now), Promise.resolve(this.now)]
         }
-        const offset = this.#playOffset || 0 + this.#pauseTime - this.#playTime
-        return this.play({...this.#playOptions, offset, when, gain: this.#pauseGain})
+        const offset = this.#playOffset + this.#pauseTime - this.#playTime
+        const then = max(this.now, when)
+        console.warn('[sample]: resume: playoptions', this.#playOptions)
+        console.warn({offset, playOffset: this.#playOffset, pauseTime: this.#pauseTime, playTime: this.#playTime})
+        return this.play({
+            ...this.#playOptions,
+            offset,
+            when: then,
+            gain: this.#pauseGain,
+        })
     }
 
     stop(options: StopOptions = {}) {
@@ -149,7 +189,7 @@ export class Sample {
         const roptions: Required<StopOptions> = { ...defaultOptions, ...options }
         const {when, fadeOut} = roptions
         const then = max(when, this.now)
-        const safety = 0.5 as const // wont't sound smooth sometimes otherwise...
+        const safety = fadeOut ? 0.5 : 0 // wont't sound smooth sometimes otherwise...
         this.#sourceNode.stop(then + fadeOut + safety)
         return this.#createEndedPromise()
     }
@@ -166,9 +206,7 @@ export class Sample {
     set detune(newDetune: number) {
         // detune is added to automator after sourcenode has been created
         this.#options.detune = newDetune
-        console.log('[detune]')
         if (this.isPlaying) {
-            console.log('[isPLaying]')
             this.#sourceNode.detune.value = newDetune
         }
     }
