@@ -1,0 +1,12 @@
+{
+  "name": "automator",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "types": "@types",
+  "scripts": {
+  },
+  "keywords": [],
+  "author": "Joel Lof <jlof@evolution.com> (https://joellof.com/)",
+  "license": "MIT"
+}

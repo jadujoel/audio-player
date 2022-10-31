@@ -1,6 +1,6 @@
 import { max } from "./clamp"
 import type { FunctionAny, PlayOptions, SampleOptions, StopOptions } from "./types"
-
+import { Automator } from "automator"
 export class Sample {
     #audioContext: AudioContext
     #sourceNode: AudioBufferSourceNode
@@ -32,6 +32,8 @@ export class Sample {
     onended: FunctionAny = () => void 0
     onstarted: FunctionAny = () => void 0
     id = 0
+
+    automator = new Automator(["gain", "pan", "detune"] as const)
 
     constructor(audioContext: AudioContext, id: number) {
         this.id = id
@@ -107,7 +109,6 @@ export class Sample {
         this.#sourceNode.loopEnd = loopEnd
         this.#sourceNode.loopStart = loopStart
         this.#sourceNode.buffer = this.buffer
-
         this.#sourceNode.addEventListener("started", (ev) => {
             console.debug("[sample]: started")
             this.onstarted(ev)
@@ -166,6 +167,10 @@ export class Sample {
             console.debug("[sample]: tried to resume sample that is already playing")
             return [Promise.resolve(this.now), Promise.resolve(this.now)]
         }
+        /* FIXME: bug doesnt take into account detune
+            https://github.com/WebAudio/web-audio-api/issues/2397#issuecomment-139273267
+            https://github.com/WebAudio/web-audio-api/issues/2397#issuecomment-1193254844
+        **/
         const offset = this.#playOffset + this.#pauseTime - this.#playTime
         const then = max(this.now, when)
         console.warn('[sample]: resume: playoptions', this.#playOptions)
