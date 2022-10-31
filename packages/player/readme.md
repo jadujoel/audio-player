@@ -1,6 +1,6 @@
 
 ```js
-//config.ts
+//config.ts 
 {
   ...,
   players: [
