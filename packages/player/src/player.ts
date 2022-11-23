@@ -93,6 +93,18 @@ export class Player {
         return firstSample ? firstSample.detune : 0
     }
 
+    set playbackRate(newPlaybackRate: number) {
+        for (const sample of this.samples) {
+            sample.playbackRate = newPlaybackRate
+        }
+    }
+
+    get playbackRate() {
+        const firstSample = this.samples[0]
+        return firstSample ? firstSample.playbackRate : 0
+    }
+
+
     get samples() {
         return [...this.samplesPlaying.items, ...this.samplesPaused.items]
     }

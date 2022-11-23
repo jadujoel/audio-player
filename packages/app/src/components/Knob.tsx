@@ -3,12 +3,6 @@ import { clamp } from "../clamp"
 import { FunctionAny } from "../utils/types"
 import "./Knob.css"
 
-// type MouseEventFix = MouseEvent & {target: {getBoundingClientRect: FunctionAny}}
-// type TouchEventFix = TouchEvent & {target: {getBoundingClientRect: FunctionAny}}
-// type MoveEvent
-//     = React.MouseEvent<HTMLDivElement> & MouseEventFix
-//     | React.TouchEvent<HTMLDivElement>  & TouchEventFix
-
 interface KnobProps {
     degrees: number
     size: number

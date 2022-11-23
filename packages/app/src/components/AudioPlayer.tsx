@@ -85,6 +85,7 @@ export function AudioPlayerComponent() {
   const [loopEnd, setLoopEnd] = useState(-1)
   const [offset, setOffset] = useState(0)
   const [duration, setDuration] = useState<number>(-1)
+  const [playbackRate, setPlaybackRate] = useState<number>(1)
 
   const [foo, updateFoo] = useState(true)
   const updateState = () => {
@@ -216,10 +217,9 @@ export function AudioPlayerComponent() {
           </div>
         </div>
 
-
-
         <div className="audio-params">
           <div className="gain">
+            <label>{precisionRound(gain, 2)}</label>
             <Knob
               onChange={(v) => {
                 setGain(v)
@@ -232,6 +232,7 @@ export function AudioPlayerComponent() {
             <label>Gain</label>
           </div>
           <div className="pan">
+            <label>{precisionRound(pan, 2)}</label>
             <Knob
               onChange={(v) => {
                 setPan(v)
@@ -244,16 +245,32 @@ export function AudioPlayerComponent() {
             <label>Pan</label>
           </div>
           <div className="detune">
+            <label>{precisionRound(detune, 0)}</label>
             <Knob
               onChange={(v) => {
                 setDetune(v)
                 player!.detune = v
               }}
+              fillStart={Knob.FillStart.Middle}
               value={detune}
               min={-4800}
               max={4800}
             />
             <label>Detune</label>
+          </div>
+          <div className="playbackRate">
+            <label>{precisionRound(playbackRate, 2)}</label>
+            <Knob
+              onChange={(v) => {
+                setDetune(v)
+                player!.playbackRate = v
+              }}
+              fillStart={Knob.FillStart.Middle}
+              value={playbackRate}
+              min={0}
+              max={16}
+            />
+            <label>PlaybackRate</label>
           </div>
         </div>
         <div className='polyphony'>

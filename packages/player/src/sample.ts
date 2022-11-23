@@ -1,6 +1,6 @@
 import { max } from "./clamp"
 import type { FunctionAny, PlayOptions, SampleOptions, StopOptions } from "./types"
-import { Automator } from "automator"
+// import { Automator } from "automator"
 export class Sample {
     #audioContext: AudioContext
     #sourceNode: AudioBufferSourceNode
@@ -33,7 +33,7 @@ export class Sample {
     onstarted: FunctionAny = () => void 0
     id = 0
 
-    automator = new Automator(["gain", "pan", "detune"] as const)
+    // automator = new Automator(["gain", "pan", "detune", "playbackRate"] as const)
 
     constructor(audioContext: AudioContext, id: number) {
         this.id = id
@@ -42,6 +42,10 @@ export class Sample {
         this.#pan = this.#audioContext.createStereoPanner()
         this.#gain = this.#audioContext.createGain()
         this.#pan.connect(this.#gain)
+        // this.automator.add("gain", this.#gain.gain)
+        // this.automator.add("pan", this.#pan.pan)
+        // this.automator.add("detune", this.#sourceNode.detune)
+        // this.automator.add("playbackRate", this.#sourceNode.playbackRate)
     }
 
     set buffer(newBuffer: AudioBuffer | null) {
@@ -133,8 +137,6 @@ export class Sample {
             this.#sourceNode.dispatchEvent(new Event("started"))
         })
 
-
-
         return [playPromise, this.#createEndedPromise()] as const
     }
 
@@ -205,15 +207,20 @@ export class Sample {
 
     get detune() {
         // detune is added to automator after sourcenode has been created
-        return this.#options.detune
+        return this.#sourceNode.detune.value
     }
 
     set detune(newDetune: number) {
-        // detune is added to automator after sourcenode has been created
         this.#options.detune = newDetune
-        if (this.isPlaying) {
-            this.#sourceNode.detune.value = newDetune
-        }
+        this.#sourceNode.detune.value = newDetune
+    }
+
+    set playbackRate(newPlaybackRate: number) {
+        this.#sourceNode.playbackRate.value = newPlaybackRate
+    }
+
+    get playbackRate() {
+        return this.#sourceNode.playbackRate.value
     }
 
     #createEndedPromise() {
