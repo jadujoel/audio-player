@@ -262,7 +262,7 @@ export function AudioPlayerComponent() {
             <label>{precisionRound(playbackRate, 2)}</label>
             <Knob
               onChange={(v) => {
-                setDetune(v)
+                setPlaybackRate(v)
                 player!.playbackRate = v
               }}
               fillStart={Knob.FillStart.Middle}
